@@ -2,17 +2,25 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <iostream>
 
 void printMyIP() {
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname)); // ホスト名を取得
+    struct ifaddrs *ifaddr;
+    getifaddrs(&ifaddr);
 
-    hostent* host_entry = gethostbyname(hostname); // ホスト情報を取得
-    if (host_entry == nullptr) {
-        std::cerr << "IPアドレスを取得できませんでした。" << std::endl;
-        return;
+    for (auto ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) continue;
+        if (ifa->ifa_addr->sa_family == AF_INET &&
+            std::string(ifa->ifa_name) == "eth0") {
+
+            char buf[INET_ADDRSTRLEN];
+            auto* sa = (struct sockaddr_in*)ifa->ifa_addr;
+            inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf));
+            std::cout << "このサーバーのIPアドレスは: " << buf << std::endl;
+        }
     }
 
-    char* ip = inet_ntoa(*((struct in_addr*)host_entry->h_addr_list[0]));
-    std::cout << "このサーバーのIPアドレスは: " << ip << std::endl;
+    freeifaddrs(ifaddr);
 }

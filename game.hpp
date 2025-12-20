@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 // 実行関数
 void server();
@@ -9,3 +10,5 @@ void printMyIP();
 void startGame(int client_fd,bool isFirstGame);
 void runGameLoopS(int client_fd);
 void runGameLoopC(int sock, const std::string& hand, int firstPlayer);
+bool cardCheck(std::vector<std::string> tableMs,std::vector<int> tableNs,std::vector<std::string> playMs,std::vector<int> playNs,std::vector<std::string> played,std::vector<std::string> hand,
+    bool bind,bool stairs,bool revolution);

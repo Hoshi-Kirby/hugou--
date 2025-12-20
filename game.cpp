@@ -103,32 +103,36 @@ void parseCard(const std::string& command, std::string& tableM, int& tableN) {
 
     // それ以降が数字や文字
     std::string numStr = command.substr(1);
+    if (command.size() > 1) {
 
-    if (numStr == "A") {
-        tableN = 1;
-    } else if (numStr == "J") {
-        tableN = 11;
-    } else if (numStr == "Q") {
-        tableN = 12;
-    } else if (numStr == "K") {
-        tableN = 13;
-    } else if (numStr == "O") {
-        tableN = 14;
-    } else if (numStr == "o") {
-        tableN = 14;
-    } else {
-        bool allDigits = true;
-        for (char c : numStr) {
-            if (!isdigit(static_cast<unsigned char>(c))) {
-                allDigits = false;
-                break;
+        if (numStr == "A") {
+            tableN = 1;
+        } else if (numStr == "J") {
+            tableN = 11;
+        } else if (numStr == "Q") {
+            tableN = 12;
+        } else if (numStr == "K") {
+            tableN = 13;
+        } else if (numStr == "O") {
+            tableN = 14;
+        } else if (numStr == "o") {
+            tableN = 14;
+        } else {
+            bool allDigits = true;
+            for (char c : numStr) {
+                if (!isdigit(static_cast<unsigned char>(c))) {
+                    allDigits = false;
+                    break;
+                }
+            }
+            if (allDigits) {
+                tableN = std::stoi(numStr);
+            } else {
+                tableN = 0; // 数字じゃなければ0にする
             }
         }
-        if (allDigits) {
-            tableN = std::stoi(numStr);
-        } else {
-            tableN = 0; // 数字じゃなければ0にする
-        }
+    }else{
+        tableN = 0;
     }
 }
 void parseCards(const std::string& commandLine,std::vector<std::string>& tableMs,std::vector<int>& tableNs) {
@@ -145,6 +149,29 @@ void parseCards(const std::string& commandLine,std::vector<std::string>& tableMs
         tableMs.push_back(m);
         tableNs.push_back(n);
     }
+    // ★ 空入力なら「場が空」を表す 0 を入れる
+    if (tableNs.empty()) {
+        tableMs.push_back("");  // マークなし
+        tableNs.push_back(0);   // 数字なし（場が空）
+    }
+}
+void sortCard(std::vector<std::string>& playMs,std::vector<int>& playNs){
+    //ならびかえ
+    std::vector<std::pair<int, std::string>> cards;
+        // playNs と playMs をペアにまとめる
+    for (size_t i = 0; i < playNs.size(); ++i) {
+        cards.emplace_back(playNs[i], playMs[i]);
+    }
+        // 数字でソート
+    std::sort(cards.begin(), cards.end(),
+            [](const auto& a, const auto& b) {
+                return a.first < b.first;
+            });
+        // ソート後に再展開
+    for (size_t i = 0; i < cards.size(); ++i) {
+        playNs[i] = cards[i].first;
+        playMs[i] = cards[i].second;
+    }
 }
 
 //ゲームループ
@@ -152,12 +179,15 @@ void runGameLoopS(int client_fd) {
     bool running = true;
     int lenHands1=13;
     int lenHands2=13;
+    bool bind=false;
+    bool stairs=false;
+    bool revolution=false;
     std::string command;
-    std::vector<std::string> tableMs;
-    std::vector<int> tableNs;    
-    std::vector<std::string> playMs;
-    std::vector<int> playNs;
-    std::vector<std::string> played;
+    std::vector<std::string> tableMs={""};
+    std::vector<int> tableNs={0};    
+    std::vector<std::string> playMs={""};
+    std::vector<int> playNs={0};
+    std::vector<std::string> played={""};
     while (running) {
         if (firstPlayer==1){
             std::cout<<"相手のターン中..."<<std::endl;
@@ -194,16 +224,32 @@ void runGameLoopS(int client_fd) {
         for (auto &card : serverHand) std::cout << card << ",";
         std::cout << std::endl;
         std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
-        std::cout << "コマンドを入力してください (quitで終了): ";
-        std::getline(std::cin, command);
+        while (!cardCheck(tableMs,tableNs,playMs,playNs,played,serverHand,bind,stairs,revolution) && command!="pass" && command!="quit"){
+            std::cout << "コマンドを入力してください (quitで終了): ";
+            std::getline(std::cin, command);
+            //handだった場合
+            if (command=="hand"){
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
+                std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
+            }
 
-        parseCards(command, playMs, playNs);
-        // 2つの配列を結合して1つの文字列にする
-        played.clear();
-        for (size_t i = 0; i < playMs.size(); ++i) {
-            played.push_back(playMs[i] + std::to_string(playNs[i]));
+            parseCards(command, playMs, playNs);
+            // 2つの配列を結合して1つの文字列にする
+            played.clear();
+            for (size_t i = 0; i < playMs.size(); ++i) {
+                played.push_back(playMs[i] + std::to_string(playNs[i]));
+            }
+
+            sortCard(playMs,playNs);
         }
-        
+
+        if (command=="pass"){
+            bind=false;
+            stairs=false;
+        }
+
         // クライアントに送信
         send(client_fd, command.c_str(), command.size(), 0);
         if (command == "quit") {
@@ -231,26 +277,45 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
     bool running = true;
     int lenHands1=13;
     int lenHands2=13;
+    bool bind=false;
+    bool stairs=false;
+    bool revolution=false;
     std::string command;
-    std::vector<std::string> tableMs;
-    std::vector<int> tableNs;
-    std::vector<std::string> playMs;
-    std::vector<int> playNs;
-    std::vector<std::string> played;
+    std::vector<std::string> tableMs={""};
+    std::vector<int> tableNs={0};    
+    std::vector<std::string> playMs={""};
+    std::vector<int> playNs={0};
+    std::vector<std::string> played={""};
     while (running) {
         if (firstPlayer==1){
             std::cout << "手札: ";
             for (auto &card : clientHand) std::cout << card << ",";
             std::cout << std::endl;
             std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
-            std::cout << "コマンドを入力してください (quitで終了): ";
-            std::getline(std::cin, command);
+            while (!cardCheck(tableMs,tableNs,playMs,playNs,played,serverHand,bind,stairs,revolution) && command!="pass" && command!="quit"){
+                std::cout << "コマンドを入力してください (quitで終了): ";
+                std::getline(std::cin, command);
+                //handだった場合
+                if (command=="hand"){
+                    std::cout << "手札: ";
+                    for (auto &card : serverHand) std::cout << card << ",";
+                    std::cout << std::endl;
+                    std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
+                }
 
-            parseCards(command, playMs, playNs);
-            // 2つの配列を結合して1つの文字列にする
-            played.clear();
-            for (size_t i = 0; i < playMs.size(); ++i) {
-                played.push_back(playMs[i] + std::to_string(playNs[i]));
+                parseCards(command, playMs, playNs);
+                // 2つの配列を結合して1つの文字列にする
+                played.clear();
+                for (size_t i = 0; i < playMs.size(); ++i) {
+                    played.push_back(playMs[i] + std::to_string(playNs[i]));
+                }
+
+                sortCard(playMs,playNs);
+            }
+
+            if (command=="pass"){
+                bind=false;
+                stairs=false;
             }
 
             // サーバーに送信

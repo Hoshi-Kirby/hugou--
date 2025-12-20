@@ -1,4 +1,4 @@
-//g++ main.cpp server.cpp client.cpp game.cpp ip.cpp -o main
+//g++ main.cpp server.cpp client.cpp game.cpp check.cpp ip.cpp -o main
 #include <iostream>
 #include <string>
 #include "game.hpp"
