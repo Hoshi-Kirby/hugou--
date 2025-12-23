@@ -27,9 +27,15 @@ void server() {
     std::cout << "接続成功！" << std::endl;
 
     bool isFirstGame=true;
-    // ゲームループ呼び出し
-    startGame(client_fd,isFirstGame);
-    runGameLoopS(client_fd);
+    winner=1;
+    int score[]={0,0,0};
+    while(winner>0){
+        startGame(client_fd,isFirstGame);
+        // ゲームループ
+        runGameLoopS(client_fd);
+        score[winner]++;
+        std::cout<<"サーバー "<<score[1]<<"-"<<score[2]<<" クライアント"<<std::endl;
+    }
 
     // 終了処理
     close(client_fd);

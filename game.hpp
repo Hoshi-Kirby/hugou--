@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+// グローバル変数
+extern int winner;
 // 実行関数
 void server();
 void client();

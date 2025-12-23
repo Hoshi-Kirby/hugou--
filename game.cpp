@@ -14,6 +14,7 @@ std::vector<std::string> serverHand;
 std::vector<std::string> clientHand;
 int firstPlayer=0;
 std::string command;
+int winner=0;
 
 std::vector<std::string> createDeck() {
     std::vector<std::string> deck;
@@ -194,6 +195,7 @@ void runGameLoopS(int client_fd) {
     bool bind=false;
     bool stairs=false;
     bool revolution=false;
+    winner=0;
     std::string command;
     std::vector<std::string> tableMs={""};
     std::vector<int> tableNs={0};    
@@ -238,6 +240,25 @@ void runGameLoopS(int client_fd) {
             if (reCh(playMs,playNs,tableMs,tableNs,played,clientHand)){
                 revolution=!revolution;
                 std::cout <<"革命"<<std::endl;
+            }
+            //勝敗
+            if (lenHands2==0){
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
+                std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
+                std::cout<<"場: ";
+                for (size_t i = 0; i < tableMs.size(); ++i) {
+                    std::cout <<table[i]<<" ";
+                }
+                std::cout<< std::endl;
+            
+                std::cout<<"ゲーム終了"<<std::endl;
+                winner=2;
+                firstPlayer=1;
+                std::cout<<"クライアントの勝ち"<<std::endl;
+                running = false;
+                break;
             }
 
 
@@ -320,6 +341,14 @@ void runGameLoopS(int client_fd) {
                 serverHand.erase(it);
             }
         }
+        //勝敗
+        if (lenHands1==0){
+            std::cout<<"ゲーム終了"<<std::endl;
+            winner=1;
+            firstPlayer=2;
+            std::cout<<"サーバーの勝ち"<<std::endl;
+            running = false;
+        }
     }
 }
 
@@ -335,6 +364,7 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
     bool bind=false;
     bool stairs=false;
     bool revolution=false;
+    winner=0;
     std::string command;
     std::vector<std::string> tableMs={""};
     std::vector<int> tableNs={0};    
@@ -417,6 +447,14 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
                     clientHand.erase(it);
                 }
             }
+            if (lenHands1==0){
+                std::cout<<"ゲーム終了"<<std::endl;
+                winner=2;
+                firstPlayer=1;
+                std::cout<<"クライアントの勝ち"<<std::endl;
+                running = false;
+                break;
+            }
         }else{
             firstPlayer=1;
         }
@@ -457,6 +495,23 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
             revolution=!revolution;
             std::cout <<"革命"<<std::endl;
         }
+        //勝敗
+        if (lenHands2==0){
+            std::cout << "手札: ";
+            for (auto &card : clientHand) std::cout << card << ",";
+            std::cout << std::endl;
+            std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
+            std::cout<<"場: ";
+            for (size_t i = 0; i < tableMs.size(); ++i) {
+                std::cout <<table[i]<<" ";
+            }
+            std::cout<< std::endl;
 
+            std::cout<<"ゲーム終了"<<std::endl;
+            winner=1;
+            firstPlayer=2;
+            std::cout<<"サーバーの勝ち"<<std::endl;
+            running = false;
+        }
     }
 }
