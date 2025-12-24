@@ -48,9 +48,11 @@ void startGame(int client_fd,bool isFirstGame) {
     std::shuffle(deck.begin(), deck.end(), rng);
 
     // サーバー用の手札13枚
+    serverHand={};
     serverHand.assign(deck.begin(), deck.begin() + 13);
 
     // クライアント用の手札13枚
+    clientHand={};
     clientHand.assign(deck.begin()+13, deck.begin() + 26);
 
     if (isFirstGame) {
@@ -100,6 +102,11 @@ void startGame(int client_fd,bool isFirstGame) {
 //受信したカードを変数に
 void parseCard(const std::string& command, std::string& tableM, int& tableN) {
     // 先頭文字がマーク
+    if (command.empty()) {
+        tableM = "a";
+        tableN = 0;
+        return;
+    }
     tableM = command.substr(0, 1);
 
     // それ以降が数字や文字
@@ -154,8 +161,9 @@ void parseCards(const std::string& commandLine,std::vector<std::string>& tableMs
     }
     // ★ 空入力なら「場が空」を表す 0 を入れる
     if (tableNs.empty()) {
-        tableMs.push_back("");  // マークなし
+        tableMs.push_back("a");  // マークなし
         tableNs.push_back(0);   // 数字なし（場が空）
+        played.push_back("a0");
     }
 }
 void sortCard(std::vector<std::string>& playMs,std::vector<int>& playNs,std::vector<std::string>& played) {
@@ -186,6 +194,75 @@ void sortCard(std::vector<std::string>& playMs,std::vector<int>& playNs,std::vec
     }
 }
 
+int winnerDe(std::vector<std::string> table, int player,bool revolution) {
+    for (int i = 0; i < table.size(); i++) {
+        if (table[i] == "Jo" || table[i] == "JO") {
+            std::cout << "反則上がり（ジョーカー）" << std::endl;
+            if (player==2){
+                std::cout<<"サーバーの勝ち"<<std::endl;
+            }else{
+                std::cout<<"クライアントの勝ち"<<std::endl;
+            }
+            return  3 - player;
+            break;
+        }
+    }
+
+    for (const auto& card : table) {
+        std::string numPart = card.substr(1);
+        if (!revolution && numPart == "2") {
+            winner = 3 - player;
+            std::cout << "反則上がり（2）" << std::endl;
+            if (player==2){
+                std::cout<<"サーバーの勝ち"<<std::endl;
+            }else{
+                std::cout<<"クライアントの勝ち"<<std::endl;
+            }
+            return  3 - player;
+        }
+        if (revolution && numPart == "3") {
+            winner = 3 - player;
+            std::cout << "反則上がり（3）" << std::endl;
+            if (player==2){
+                std::cout<<"サーバーの勝ち"<<std::endl;
+            }else{
+                std::cout<<"クライアントの勝ち"<<std::endl;
+            }
+            return  3 - player;
+        }
+    }
+
+    if (table.size() == 1 && table[0] == "s3") {
+        std::cout << "反則上がり（スペ3）" << std::endl;
+        if (player==2){
+            std::cout<<"サーバーの勝ち"<<std::endl;
+        }else{
+            std::cout<<"クライアントの勝ち"<<std::endl;
+        }
+        return  3 - player;
+    }
+
+    if (std::all_of(table.begin(), table.end(),
+        [](const std::string& card) {
+            return card.size() >= 2 && card[1] == '8';
+        })) {
+        std::cout << "反則上がり（8切り）" << std::endl;
+        if (player==2){
+            std::cout<<"サーバーの勝ち"<<std::endl;
+        }else{
+            std::cout<<"クライアントの勝ち"<<std::endl;
+        }
+        return  3 - player;
+    }
+
+    if (player==1){
+        std::cout<<"サーバーの勝ち"<<std::endl;
+    }else{
+        std::cout<<"クライアントの勝ち"<<std::endl;
+    }
+    return player;
+}
+
 
 //ゲームループ
 void runGameLoopS(int client_fd) {
@@ -214,7 +291,7 @@ void runGameLoopS(int client_fd) {
             }
             std::string command(buffer);
             
-            // 仮のゲーム処理: "quit" が来たら終了
+            // "quit" が来たら終了
             if (command == "quit") {
                 std::cout<<"クライアントがゲームを終了しました"<<std::endl;
                 running = false;
@@ -254,9 +331,8 @@ void runGameLoopS(int client_fd) {
                 std::cout<< std::endl;
             
                 std::cout<<"ゲーム終了"<<std::endl;
-                winner=2;
-                firstPlayer=1;
-                std::cout<<"クライアントの勝ち"<<std::endl;
+                winner=winnerDe(table,2,revolution);
+                firstPlayer=2-winner;
                 running = false;
                 break;
             }
@@ -282,8 +358,12 @@ void runGameLoopS(int client_fd) {
             command="pass";// 8切り発動
             std::cout<<"8切り"<< std::endl;
         }
+        if (tableNs[0]==3 && playNs[0]==14){
+            command="pass";// スぺ３発動
+            std::cout<<"スペ3返し"<< std::endl;
+        }
 
-        while (!cardCheck(tableMs,tableNs,playMs,playNs,played,serverHand,bind,stairs,revolution) && command!="pass" && command!="quit"){
+        while (!cardCheck(tableMs,tableNs,playMs,playNs,played,serverHand,bind,stairs,revolution) && (table[0]=="" || command!="pass") && command!="quit"){
             
             std::cout << "コマンドを入力してください (quitで終了): ";
             std::getline(std::cin, command);
@@ -319,6 +399,9 @@ void runGameLoopS(int client_fd) {
         if (!playNs.empty() && std::all_of(playNs.begin(), playNs.end(),[](int x){ return x == 8; })) {
             std::cout<<"8切り"<< std::endl;
         }
+        if (tableNs[0]==14 && playNs[0]==3){
+            std::cout<<"スペ3返し"<< std::endl;
+        }
         if (command=="pass"){
             bind=false;
             stairs=false;
@@ -344,9 +427,8 @@ void runGameLoopS(int client_fd) {
         //勝敗
         if (lenHands1==0){
             std::cout<<"ゲーム終了"<<std::endl;
-            winner=1;
-            firstPlayer=2;
-            std::cout<<"サーバーの勝ち"<<std::endl;
+            winner=winnerDe(played,1,revolution);
+            firstPlayer=2-winner;
             running = false;
         }
     }
@@ -388,7 +470,11 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
                 command="pass";// 8切り発動
                 std::cout<<"8切り"<< std::endl;
             }
-            while (!cardCheck(tableMs,tableNs,playMs,playNs,played,clientHand,bind,stairs,revolution) && command!="pass" && command!="quit"){
+            if (tableNs[0]==3 && playNs[0]==14){
+                command="pass";// スぺ３発動
+                std::cout<<"スペ3返し"<< std::endl;
+            }
+            while (!cardCheck(tableMs,tableNs,playMs,playNs,played,clientHand,bind,stairs,revolution) && (table[0]=="" || command!="pass") && command!="quit"){
 
                 std::cout << "コマンドを入力してください (quitで終了): ";
                 std::getline(std::cin, command);
@@ -424,6 +510,9 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
             if (!playNs.empty() && std::all_of(playNs.begin(), playNs.end(),[](int x){ return x == 8; })) {
                 std::cout<<"8切り"<< std::endl;
             }
+            if (tableNs[0]==14 && playNs[0]==3){
+                std::cout<<"スペ3返し"<< std::endl;
+            }
             if (command=="pass"){
                 bind=false;
                 stairs=false;
@@ -449,9 +538,8 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
             }
             if (lenHands1==0){
                 std::cout<<"ゲーム終了"<<std::endl;
-                winner=2;
-                firstPlayer=1;
-                std::cout<<"クライアントの勝ち"<<std::endl;
+                winner=winnerDe(played,2,revolution);
+                firstPlayer=2-winner;
                 running = false;
                 break;
             }
@@ -508,9 +596,8 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
             std::cout<< std::endl;
 
             std::cout<<"ゲーム終了"<<std::endl;
-            winner=1;
-            firstPlayer=2;
-            std::cout<<"サーバーの勝ち"<<std::endl;
+            winner=winnerDe(table,1,revolution);
+            firstPlayer=2-winner;
             running = false;
         }
     }

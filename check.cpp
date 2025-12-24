@@ -119,7 +119,7 @@ bool cardCheck(std::vector<std::string> tableMs,std::vector<int> tableNs,std::ve
         }
         if (!playNs.empty() && !tableNs.empty() && tableNs[0] != 0) {
             if (playNs.front() <= tableNs.front()) {
-                // 特殊ルール: ジョーカー vs スペード3
+                // スペ3
                 if (!(tableNs.size()==1 && tableNs[0]==14 && spe3)) {
                     std::cout<<"場より強いカードしか出せません"<<std::endl;
                     return false;// 場のカードより弱い数字を出している
@@ -129,8 +129,11 @@ bool cardCheck(std::vector<std::string> tableMs,std::vector<int> tableNs,std::ve
         if (bind){
             for (const auto& m : playMs) {
                 if (m != tableMs[0] && m != "J") {
-                    std::cout<<"場と同じマークしか出せません"<<std::endl;
-                    return false; // 縛り違反
+                    // スペ3
+                    if (!(tableNs.size()==1 && tableNs[0]==14 && spe3)) {
+                        std::cout<<"場と同じマークしか出せません"<<std::endl;
+                        return false; // 縛り違反
+                    }
                 }
             }
         }
