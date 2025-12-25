@@ -10,6 +10,11 @@
 #include <algorithm>
 #include <random>
 
+bool excCheck(const std::string& card, const std::vector<std::string>& hand) {
+    if (card.empty()) {return false;}
+    return std::find(hand.begin(), hand.end(), card) != hand.end();
+}
+
 bool checkStairsWithJoker(const std::vector<int>& nums, int jokers) {
     if (nums.empty()) return jokers > 0; // 全部ジョーカーならOK
 

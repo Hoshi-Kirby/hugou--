@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <random>
+#include <map>
 
 std::vector<std::string> serverHand;
 std::vector<std::string> clientHand;
@@ -166,6 +167,135 @@ void parseCards(const std::string& commandLine,std::vector<std::string>& tableMs
         played.push_back("a0");
     }
 }
+
+//手札を並べ替える
+int cardValue(std::string card, bool revolution){
+    std::string numStr = card.substr(1);
+    int n;
+    if (numStr == "A") n=12;
+    else if (numStr == "J") n=9;
+    else if (numStr == "2") n=13;
+    else if (numStr == "Q") n=10;
+    else if (numStr == "K") n=11;
+    else if (numStr == "O" || numStr == "o") n=14; // Joker
+    else {
+        // 数字なら stoi して -2
+        bool allDigits = true;
+        for (char c : numStr) {
+            if (!isdigit(static_cast<unsigned char>(c))) {
+                allDigits = false;
+                break;
+            }
+        }
+        if (allDigits) {
+            n=std::stoi(numStr) - 2;
+        } else {
+            n=0; // 不正
+        }
+    }
+    
+    if (revolution){
+        if (0<n && n<14){
+            n=14-n;
+        }
+    }
+    return n;
+}
+
+void sortAK(std::vector<std::string>& hand,bool revolution) {
+    std::sort(hand.begin(), hand.end(),
+        [revolution](const std::string& a, const std::string& b) {
+            return cardValue(a,revolution) < cardValue(b,revolution);
+        });
+}
+void sortKA(std::vector<std::string>& hand,bool revolution) {
+    std::sort(hand.begin(), hand.end(),
+        [&revolution](const std::string& a, const std::string& b) {
+            return cardValue(a,revolution) > cardValue(b,revolution);
+        });
+}
+void sortsuit(std::vector<std::string>& hand, const std::string& command, bool revolution,bool AK) {
+    if (command.size() < 8) return;
+
+    std::string orderStr = command.substr(4, 4);
+
+    std::map<char,int> suitOrder;
+    for (int i = 0; i < orderStr.size(); i++) {
+        suitOrder[orderStr[i]] = i;
+    }
+
+    std::sort(hand.begin(), hand.end(),
+        [revolution, suitOrder, AK](const std::string& a, const std::string& b) {
+            char sa = a[0];
+            char sb = b[0];
+
+            // ジョーカー処理
+            if (sa == 'J' && sb == 'J') return false; // 両方ジョーカーならそのまま
+            if (sa == 'J') {
+                return AK ? false : true; // AK=trueなら右端、AK=falseなら左端
+            }
+            if (sb == 'J') {
+                return AK ? true : false; // AK=trueなら右端、AK=falseなら左端
+            }
+
+            int va = suitOrder.count(sa) ? suitOrder.at(sa) : 5;
+            int vb = suitOrder.count(sb) ? suitOrder.at(sb) : 5;
+
+            if (va == vb) {
+                if (AK) {
+                    return cardValue(a, revolution) < cardValue(b, revolution); // 弱→強
+                } else {
+                    return cardValue(a, revolution) > cardValue(b, revolution); // 強→弱
+                }
+            }
+            return va < vb;
+        });
+}
+void sortcustom(std::vector<std::string>& hand) {
+    std::cout << "並べ替えるカードを入力してください： ";
+
+    std::string inputOrder;
+    std::getline(std::cin, inputOrder);
+    std::istringstream iss(inputOrder);
+    std::string card;
+    std::vector<std::string> ordered;
+
+    // 入力されたカードを順番通りに取り出す
+    while (iss >> card) {
+        // hand に存在するか確認
+        auto it = std::find(hand.begin(), hand.end(), card);
+        if (it != hand.end()) {
+            ordered.push_back(card);
+            hand.erase(it); // hand から削除
+        }
+    }
+
+    // 最後に順番通り追加
+    for (auto& c : ordered) {
+        hand.push_back(c);
+    }
+}
+
+
+
+bool isValidSortCommand(const std::string& command) {
+    if (command.size() != 8) return false; // "sort" + 4文字 = 8文字
+
+    if (command.substr(0,4) != "sort") return false;
+
+    std::string order = command.substr(4,4); // 後半4文字
+
+    // 必要な文字セット
+    std::string required = "scdh";
+
+    // 並べ替えチェック
+    std::sort(order.begin(), order.end());
+    std::sort(required.begin(), required.end());
+
+    return order == required;
+}
+
+
 void sortCard(std::vector<std::string>& playMs,std::vector<int>& playNs,std::vector<std::string>& played) {
 
     // 3つをまとめる
@@ -266,6 +396,14 @@ int winnerDe(std::vector<std::string> table, int player,bool revolution) {
 
 //ゲームループ
 void runGameLoopS(int client_fd) {
+    sortAK(serverHand,false);
+    bool AK=true;
+    std::cout << "手札: ";
+    for (auto &card : serverHand) std::cout << card << ",";
+    std::cout << std::endl;
+    if (winner<3){
+        excange(1, serverHand, client_fd);
+    }
     bool running = true;
     int lenHands1=13;
     int lenHands2=13;
@@ -282,6 +420,9 @@ void runGameLoopS(int client_fd) {
     std::vector<std::string> played={""};
     while (running) {
         if (firstPlayer==1){
+            std::cout << "手札: ";
+            for (auto &card : serverHand) std::cout << card << ",";
+            std::cout << std::endl;
             std::cout<<"相手のターン中..."<<std::endl;
             char buffer[1024] = {0};
             int bytes = recv(client_fd, buffer, sizeof(buffer), 0);
@@ -345,9 +486,6 @@ void runGameLoopS(int client_fd) {
 
 
         command="";
-        std::cout << "手札: ";
-        for (auto &card : serverHand) std::cout << card << ",";
-        std::cout << std::endl;
         std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
         std::cout<<"場: ";
         for (size_t i = 0; i < tableMs.size(); ++i) {
@@ -365,7 +503,7 @@ void runGameLoopS(int client_fd) {
 
         while (!cardCheck(tableMs,tableNs,playMs,playNs,played,serverHand,bind,stairs,revolution) && (table[0]=="" || command!="pass") && command!="quit"){
             
-            std::cout << "コマンドを入力してください (quitで終了): ";
+            std::cout << "出すカードを入力してください:";
             std::getline(std::cin, command);
             //handだった場合
             if (command=="hand"){
@@ -378,6 +516,33 @@ void runGameLoopS(int client_fd) {
                     std::cout <<table[i]<<" ";
                 }
                 std::cout<< std::endl;
+            }
+            //sort
+            if (command=="sortAK") {
+                sortAK(serverHand,revolution);
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
+                AK=true;
+            }
+            if (command=="sortKA") {
+                sortKA(serverHand,revolution);
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
+                AK=false;
+            }
+            if (isValidSortCommand(command)){
+                sortsuit(serverHand,command,revolution,AK);
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
+            }
+            if (command=="sortcustom") {
+                sortcustom(serverHand);
+                std::cout << "手札: ";
+                for (auto &card : serverHand) std::cout << card << ",";
+                std::cout << std::endl;
             }
 
             parseCards(command, playMs, playNs,played);
@@ -437,8 +602,17 @@ void runGameLoopS(int client_fd) {
 void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
     std::istringstream iss(hand);
     std::string token;
+    clientHand={};
     while (getline(iss, token, ',')) {  // 区切り文字をコンマに指定
         clientHand.push_back(token);
+    }
+    sortAK(clientHand,false);
+    bool AK=true;
+    std::cout << "手札: ";
+    for (auto &card : clientHand) std::cout << card << ",";
+    std::cout << std::endl;
+    if (winner<3){
+        excange(2, clientHand, sock);
     }
     bool running = true;
     int lenHands1=13;
@@ -457,9 +631,6 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
     while (running) {
         if (firstPlayer==1){
             command="";
-            std::cout << "手札: ";
-            for (auto &card : clientHand) std::cout << card << ",";
-            std::cout << std::endl;
             std::cout << "自分"<< lenHands1<<"枚 相手"<<lenHands2<<"枚" <<std::endl;
             std::cout<<"場: ";
             for (size_t i = 0; i < tableMs.size(); ++i) {
@@ -476,7 +647,7 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
             }
             while (!cardCheck(tableMs,tableNs,playMs,playNs,played,clientHand,bind,stairs,revolution) && (table[0]=="" || command!="pass") && command!="quit"){
 
-                std::cout << "コマンドを入力してください (quitで終了): ";
+                std::cout << "出すカードを入力してください:";
                 std::getline(std::cin, command);
                 //handだった場合
                 if (command=="hand"){
@@ -489,6 +660,33 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
                         std::cout <<table[i]<<" ";
                     }
                     std::cout<< std::endl;
+                }
+                //sort
+                if (command=="sortAK") {
+                    sortAK(clientHand,revolution);
+                    std::cout << "手札: ";
+                    for (auto &card : clientHand) std::cout << card << ",";
+                    std::cout << std::endl;
+                    AK=true;
+                }
+                if (command=="sortKA") {
+                    sortKA(clientHand,revolution);
+                    std::cout << "手札: ";
+                    for (auto &card : clientHand) std::cout << card << ",";
+                    std::cout << std::endl;
+                    AK=false;
+                }
+                if (isValidSortCommand(command)){
+                    sortsuit(clientHand,command,revolution,AK);
+                    std::cout << "手札: ";
+                    for (auto &card : clientHand) std::cout << card << ",";
+                    std::cout << std::endl;
+                }
+                if (command=="sortcustom") {
+                    sortcustom(clientHand);
+                    std::cout << "手札: ";
+                    for (auto &card : clientHand) std::cout << card << ",";
+                    std::cout << std::endl;
                 }
 
                 parseCards(command, playMs, playNs,played);
@@ -548,6 +746,9 @@ void runGameLoopC(int sock,const std::string& hand, int firstPlayer) {
         }
 
         // サーバーから返事を受信
+        std::cout << "手札: ";
+        for (auto &card : clientHand) std::cout << card << ",";
+        std::cout << std::endl;
         std::cout<<"相手のターン中..."<<std::endl;
         char buffer[1024] = {0};
         int bytes = recv(sock, buffer, sizeof(buffer), 0);

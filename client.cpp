@@ -26,7 +26,7 @@ void client() {
 
     std::cout << "接続成功！" << std::endl;
 
-    winner=1;
+    winner=3;
     int score[]={0,0,0};
     while(winner>0){
         // サーバーから手札を受け取る

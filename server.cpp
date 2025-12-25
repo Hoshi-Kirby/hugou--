@@ -27,7 +27,7 @@ void server() {
     std::cout << "接続成功！" << std::endl;
 
     bool isFirstGame=true;
-    winner=1;
+    winner=3;
     int score[]={0,0,0};
     while(winner>0){
         startGame(client_fd,isFirstGame);
